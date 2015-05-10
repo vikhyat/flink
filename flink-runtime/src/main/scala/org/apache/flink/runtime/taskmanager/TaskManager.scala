@@ -33,6 +33,8 @@ import com.codahale.metrics.json.MetricsModule
 import com.codahale.metrics.jvm.{MemoryUsageGaugeSet, GarbageCollectorMetricSet}
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import grizzled.slf4j.Logger
+import org.apache.flink.api.common.JobID
 
 import org.apache.flink.api.common.cache.DistributedCache
 import org.apache.flink.configuration._
@@ -147,6 +149,10 @@ extends Actor with ActorLogMessages with ActorLogging {
 
   /** Registry of metrics periodically transmitted to the JobManager */
   private val metricRegistry = TaskManager.createMetricsRegistry()
+
+  /** Per-task metrics **/
+  private val taskMetrics = new scala.collection.mutable.ArrayBuffer[(JobID, ExecutionAttemptID,
+    MetricRegistry)]
 
   /** Metric serialization */
   private val metricRegistryMapper: ObjectMapper = new ObjectMapper()
@@ -840,9 +846,10 @@ extends Actor with ActorLogMessages with ActorLogging {
         case Some(jobManager) =>
           val splitProvider = new TaskInputSplitProvider(jobManager, jobID, vertexID,
             executionID, userCodeClassLoader, askTimeout)
-
+          val taskMetric = new MetricRegistry()
+          taskMetrics.append((jobID, executionID, taskMetric))
           new RuntimeEnvironment(jobManager, task, tdd, userCodeClassLoader,
-            memoryManager, ioManager, splitProvider, bcVarManager, network)
+            memoryManager, ioManager, splitProvider, bcVarManager, taskMetric, network)
 
         case None => throw new IllegalStateException(
           "TaskManager has not yet been registered at a JobManager.")
@@ -1048,6 +1055,17 @@ extends Actor with ActorLogMessages with ActorLogging {
           "Error cleaning up local temp files from the distributed cache.", e)
       }
     }
+
+
+    // unregister task from task metrics
+    taskMetrics.find(entry => entry._1 == task.getJobID) match {
+      case Some(entry) => {
+        taskMetrics -= entry
+      }
+      case None => {
+        log.warn(s"Unable to find metric for task $task");
+      }
+    }
   }
 
   // --------------------------------------------------------------------------
@@ -1060,7 +1078,14 @@ extends Actor with ActorLogMessages with ActorLogging {
    */
   private def sendHeartbeatToJobManager(): Unit = {
     try {
+<<<<<<< HEAD
       LOG.debug("Sending heartbeat to JobManager")
+=======
+      log.debug("Sending heartbeat to JobManager")
+      for(metric <- taskMetrics) {
+        log.info(s"+++metric $metric ${metricRegistryMapper.writeValueAsString(metric._3)}")
+      }
+>>>>>>> ae87aee... port code of old branch to current (manually)
       val report: Array[Byte] = metricRegistryMapper.writeValueAsBytes(metricRegistry)
       currentJobManager foreach {
         jm => jm ! Heartbeat(instanceID, report)
