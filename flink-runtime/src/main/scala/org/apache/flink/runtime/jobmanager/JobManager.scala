@@ -20,6 +20,7 @@ package org.apache.flink.runtime.jobmanager
 
 import java.io.{IOException, File}
 import java.net.InetSocketAddress
+import java.util
 import java.util.Collections
 
 import akka.actor.Status.{Success, Failure}
@@ -29,7 +30,7 @@ import org.apache.flink.core.io.InputSplitAssigner
 import org.apache.flink.runtime.accumulators.StringifiedAccumulatorResult
 import org.apache.flink.runtime.blob.BlobServer
 import org.apache.flink.runtime.client._
-import org.apache.flink.runtime.executiongraph.{ExecutionJobVertex, ExecutionGraph}
+import org.apache.flink.runtime.executiongraph.{ExecutionAttemptID, ExecutionJobVertex, ExecutionGraph}
 import org.apache.flink.runtime.jobmanager.web.WebInfoServer
 import org.apache.flink.runtime.messages.ArchiveMessages.ArchiveExecutionGraph
 import org.apache.flink.runtime.messages.CheckpointingMessages.{StateBarrierAck, BarrierAck}
@@ -37,6 +38,7 @@ import org.apache.flink.runtime.messages.ExecutionGraphMessages.JobStatusChanged
 import org.apache.flink.runtime.messages.Messages.{Disconnect, Acknowledge}
 import org.apache.flink.runtime.messages.TaskMessages.UpdateTaskExecutionState
 import org.apache.flink.runtime.messages.accumulators._
+import org.apache.flink.runtime.metrics.TaskMetrics
 import org.apache.flink.runtime.process.ProcessReaper
 import org.apache.flink.runtime.security.SecurityUtils
 import org.apache.flink.runtime.security.SecurityUtils.FlinkSecuredRunner
@@ -51,7 +53,7 @@ import org.apache.flink.runtime.jobmanager.accumulators.AccumulatorManager
 import org.apache.flink.runtime.jobmanager.scheduler.{Scheduler => FlinkScheduler}
 import org.apache.flink.runtime.messages.JobManagerMessages._
 import org.apache.flink.runtime.messages.RegistrationMessages._
-import org.apache.flink.runtime.messages.TaskManagerMessages.{SendStackTrace, Heartbeat}
+import org.apache.flink.runtime.messages.TaskManagerMessages.{TaskMetricsReport, SendStackTrace, Heartbeat}
 import org.apache.flink.runtime.profiling.ProfilingUtils
 import org.apache.flink.util.{ExceptionUtils, InstantiationUtil}
 
@@ -109,7 +111,6 @@ class JobManager(val flinkConfiguration: Configuration,
   /** List of current jobs running jobs */
   val currentJobs = scala.collection.mutable.HashMap[JobID, (ExecutionGraph, JobInfo)]()
 
-
   /**
    * Run when the job manager is started. Simply logs an informational message.
    */
@@ -145,6 +146,20 @@ class JobManager(val flinkConfiguration: Configuration,
       log.debug("Job manager {} is completely stopped.", self.path)
     }
   }
+
+  def updateExecutionGraphWithTaskMetrics(taskMetrics: Set[TaskMetricsReport]): Unit = {
+    taskMetrics.foreach (taskMetric => {
+      currentJobs.get(taskMetric.jobId) match {
+        case Some((executionGraph, _)) => {
+          executionGraph
+        }
+        case None => log.warn(s"Unable to find job ${taskMetric.jobId} for updating the task " +
+          "metrics");
+      }
+    })
+
+  }
+
 
   /**
    * Central work method of the JobManager actor. Receives messages and reacts to them.
@@ -401,10 +416,11 @@ class JobManager(val flinkConfiguration: Configuration,
       import scala.collection.JavaConverters._
       sender ! RegisteredTaskManagers(instanceManager.getAllRegisteredInstances.asScala)
 
-    case Heartbeat(instanceID, metricsReport) =>
+    case Heartbeat(instanceID, metricsReport, taskMetrics) =>
       try {
         log.debug("Received hearbeat message from {}", instanceID)
         instanceManager.reportHeartBeat(instanceID, metricsReport)
+        updateExecutionGraphWithTaskMetrics(taskMetrics);
       } catch {
         case t: Throwable => log.error(t, "Could not report heart beat from {}.", sender().path)
       }

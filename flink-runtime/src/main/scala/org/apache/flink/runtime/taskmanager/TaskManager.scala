@@ -1021,6 +1021,10 @@ extends Actor with ActorLogMessages with ActorLogging {
    */
   private def removeAllTaskResources(task: Task): Unit = {
 
+    for(metric <- taskMetrics) {
+      LOG.info(s"+++metric $metric ${metricRegistryMapper.writeValueAsString(metric._3)}")
+    }
+
     // release the critical things first, and fail fatally if it does not work
 
     // this releases all task resources, like buffer pools and intermediate result
@@ -1063,7 +1067,7 @@ extends Actor with ActorLogMessages with ActorLogging {
         taskMetrics -= entry
       }
       case None => {
-        log.warn(s"Unable to find metric for task $task");
+        LOG.warn(s"Unable to find metric for task $task");
       }
     }
   }
@@ -1078,17 +1082,19 @@ extends Actor with ActorLogMessages with ActorLogging {
    */
   private def sendHeartbeatToJobManager(): Unit = {
     try {
-<<<<<<< HEAD
       LOG.debug("Sending heartbeat to JobManager")
-=======
-      log.debug("Sending heartbeat to JobManager")
       for(metric <- taskMetrics) {
-        log.info(s"+++metric $metric ${metricRegistryMapper.writeValueAsString(metric._3)}")
+        LOG.info(s"+++metric $metric ${metricRegistryMapper.writeValueAsString(metric._3)}")
       }
->>>>>>> ae87aee... port code of old branch to current (manually)
-      val report: Array[Byte] = metricRegistryMapper.writeValueAsBytes(metricRegistry)
+
+      val taskManagerReport: Array[Byte] = metricRegistryMapper.writeValueAsBytes(metricRegistry)
+      val serializedTaskMetrics = taskMetrics.toSet.map(taskMetric =>
+        TaskMetricsReport(taskMetric._1,
+          taskMetric._2,
+          metricRegistryMapper.writeValueAsBytes(taskMetric._3)))
+
       currentJobManager foreach {
-        jm => jm ! Heartbeat(instanceID, report)
+        jm => jm ! Heartbeat(instanceID, taskManagerReport, serializedTaskMetrics)
       }
     }
     catch {
