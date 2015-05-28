@@ -192,6 +192,9 @@ function fillTable(table, json) {
 							<th>Canceling</th>\
 							<th>Canceled</th>\
 							<th>Failed</th>\
+                                                        <th>Broadcasts</th>\
+                                                        <th>Incoming</th>\
+                                                        <th>Outgoing</th>\
 						</tr>";
 
 		$.each(job.groupvertices, function(j, groupvertex) {
@@ -248,6 +251,7 @@ function fillTable(table, json) {
 		jobtable += progressBar(countTasks, countCanceling, 'warning canceling');
 		jobtable += progressBar(countTasks, countCanceled, 'warning canceled');
 		jobtable += progressBar(countTasks, countFailed, 'danger failed');
+
 		jobtable += "</tr>";
 
 		jobtable += "</table></div>"
@@ -304,6 +308,34 @@ function newWidth(maximum, val) {
  */
 function updateTable(json) {
 	var pollfinished = false;
+
+        if (json.metrics) {
+          $.each(json.metrics, function(i, m) {
+            var broadcast = 0,
+                incoming = 0,
+                outgoing = 0;
+
+            $.each(m.tasks, function(j, t_t) {
+              $.each(Object.keys(t_t), function(k, key) {
+                var t = t_t[key];
+                broadcast += t.counters["record.broadcast.incomings"].count;
+                incoming += t.counters["record.incomings"].count;
+                outgoing += t.counters["record.outgoings"].count;
+              });
+            });
+
+            var tr = $("#" + m.vertexId).parent().parent().parent().parent().parent().prev();
+            if (tr.children(".broadcast").length === 0) {
+              tr.append("<td class='broadcast'></td>");
+              tr.append("<td class='incoming'></td>");
+              tr.append("<td class='outgoing'></td>");
+            }
+            tr.children(".broadcast").html(broadcast);
+            tr.children(".incoming").html(incoming);
+            tr.children(".outgoing").html(outgoing);
+          });
+        }
+
 	$.each(json.vertexevents , function(i, event) {
 
 		if(parseInt($("#"+event.vertexid).attr("lastupdate")) < event.timestamp)
@@ -411,7 +443,7 @@ function updateTable(json) {
 	});
 	
 	if(!pollfinished)
-		 setTimeout(function() {poll(json.jobid)}, 2000);
+		 setTimeout(function() {poll(json.jobid)}, 800);
 	else if(recentjobs.length == 0) {
 		// wait long enough for job to be completely removed on server side before new init
 		setTimeout(init, 5000);

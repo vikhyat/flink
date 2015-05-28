@@ -25,6 +25,7 @@ import org.apache.flink.runtime.JobException;
 import org.apache.flink.runtime.akka.AkkaUtils;
 import org.apache.flink.runtime.blob.BlobKey;
 import org.apache.flink.runtime.execution.ExecutionState;
+import org.apache.flink.runtime.instance.InstanceID;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.jobgraph.AbstractJobVertex;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
@@ -45,11 +46,11 @@ import scala.concurrent.duration.Duration;
 import scala.concurrent.duration.FiniteDuration;
 
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
 import java.util.Map;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.Collections;
 import java.util.NoSuchElementException;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
@@ -109,6 +110,8 @@ public class ExecutionGraph implements Serializable {
 
 	/** All job vertices that are part of this graph */
 	private final ConcurrentHashMap<JobVertexID, ExecutionJobVertex> tasks;
+
+	private final ConcurrentHashMap<ExecutionAttemptID, ConcurrentHashMap<InstanceID, byte[]>> metrics;
 
 	/** All vertices, in the order in which they were created **/
 	private final List<ExecutionJobVertex> verticesInCreationOrder;
@@ -208,6 +211,7 @@ public class ExecutionGraph implements Serializable {
 		this.userClassLoader = userClassLoader;
 
 		this.tasks = new ConcurrentHashMap<JobVertexID, ExecutionJobVertex>();
+		this.metrics = new ConcurrentHashMap<ExecutionAttemptID, ConcurrentHashMap<InstanceID, byte[]>>();
 		this.intermediateResults = new ConcurrentHashMap<IntermediateDataSetID, IntermediateResult>();
 		this.verticesInCreationOrder = new ArrayList<ExecutionJobVertex>();
 		this.currentExecutions = new ConcurrentHashMap<ExecutionAttemptID, Execution>();
@@ -780,5 +784,16 @@ public class ExecutionGraph implements Serializable {
 		scheduler = null;
 		parentContext = null;
 		stateCheckpointerActor = null;
+	}
+
+	public void updateMetrics(ExecutionAttemptID attemptID, InstanceID instanceID, byte[] serializedMetrics) {
+		if (!this.metrics.containsKey(attemptID)) {
+			this.metrics.put(attemptID, new ConcurrentHashMap<InstanceID, byte[]>());
+		}
+		this.metrics.get(attemptID).put(instanceID, serializedMetrics);
+	}
+
+	public ConcurrentHashMap<ExecutionAttemptID, ConcurrentHashMap<InstanceID, byte[]>> getMetrics() {
+		return this.metrics;
 	}
 }

@@ -23,6 +23,7 @@ import java.util
 import org.apache.flink.api.common.JobID
 import org.apache.flink.runtime.executiongraph.ExecutionAttemptID
 import org.apache.flink.runtime.instance.InstanceID
+import org.apache.flink.runtime.jobgraph.JobVertexID
 
 /**
  * Miscellaneous actor messages exchanged with the TaskManager.

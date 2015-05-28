@@ -25,6 +25,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
@@ -36,7 +37,13 @@ import akka.actor.ActorRef;
 import akka.pattern.Patterns;
 import akka.util.Timeout;
 import org.apache.flink.runtime.accumulators.StringifiedAccumulatorResult;
+import org.apache.flink.runtime.executiongraph.Execution;
+import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
+import org.apache.flink.runtime.executiongraph.ExecutionVertex;
+import org.apache.flink.runtime.executiongraph.ExecutionJobVertex;
+import org.apache.flink.runtime.executiongraph.ExecutionGraph;
 import org.apache.flink.runtime.instance.InstanceConnectionInfo;
+import org.apache.flink.runtime.instance.InstanceID;
 import org.apache.flink.runtime.messages.ArchiveMessages.ArchivedJobs;
 import org.apache.flink.runtime.messages.ArchiveMessages;
 import org.apache.flink.runtime.messages.JobManagerMessages;
@@ -49,13 +56,10 @@ import org.apache.flink.runtime.messages.accumulators.AccumulatorResultStringsFo
 import org.apache.flink.runtime.messages.accumulators.AccumulatorResultsErroneous;
 import org.apache.flink.runtime.messages.accumulators.AccumulatorResultsNotFound;
 import org.apache.flink.runtime.messages.accumulators.RequestAccumulatorResultsStringified;
+import org.codehaus.jettison.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.flink.runtime.execution.ExecutionState;
-import org.apache.flink.runtime.executiongraph.Execution;
-import org.apache.flink.runtime.executiongraph.ExecutionGraph;
-import org.apache.flink.runtime.executiongraph.ExecutionJobVertex;
-import org.apache.flink.runtime.executiongraph.ExecutionVertex;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.runtime.jobgraph.JobStatus;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
@@ -132,6 +136,39 @@ public class JobManagerInfoServlet extends HttpServlet {
 					if(jobResponse instanceof JobFound){
 						ExecutionGraph archivedJob = ((JobFound)result).executionGraph();
 						writeJsonForArchivedJob(resp.getWriter(), archivedJob);
+					} else {
+						LOG.warn("DoGet:job: Could not find job for job ID " + jobId);
+					}
+				}
+			}
+			else if("details".equals(req.getParameter("get"))) {
+				String jobId = req.getParameter("job");
+
+				resp.getWriter().write(jobId + "\n");
+				response = Patterns.ask(archive, new RequestJob(JobID.fromHexString(jobId)),
+						new Timeout(timeout));
+
+				result = Await.result(response, timeout);
+
+				resp.getWriter().write(result.toString() + "\n");
+				resp.getWriter().write(Boolean.toString(!(result instanceof JobResponse)) + "\n");
+				if(!(result instanceof JobResponse)){
+					throw new RuntimeException("RequestJob requires a response of type JobResponse. " +
+							"Instead the response is of type " + result.getClass());
+				}else {
+					final JobResponse jobResponse = (JobResponse) result;
+					resp.getWriter().write(jobResponse.toString());
+					resp.getWriter().write(Boolean.toString(jobResponse instanceof JobFound));
+
+					if(jobResponse instanceof JobFound){
+						resp.getWriter().write("{\"graph\":");
+						ExecutionGraph archivedJob = ((JobFound)result).executionGraph();
+						writeJsonForArchivedJob(resp.getWriter(), archivedJob);
+						resp.getWriter().write(",");
+						JSONObject metricsJson = new JSONObject(archivedJob.getMetrics());
+						resp.getWriter().write("\"metrics\"");
+						resp.getWriter().write(metricsJson.toString());
+						resp.getWriter().write("}");
 					} else {
 						LOG.warn("DoGet:job: Could not find job for job ID " + jobId);
 					}
@@ -592,8 +629,40 @@ public class JobManagerInfoServlet extends HttpServlet {
 						wrt.write("\"timestamp\": \"" + graph.getStatusTimestamp(graph.getState()) + "\"");
 						wrt.write("}");
 
-						wrt.write("]");
+						wrt.write("],");
+						wrt.write("\"metrics\": [");
+						first = true;
 
+						for (ExecutionAttemptID attemptId: graph.getMetrics().keySet()) {
+							if (first) {
+								first = false;
+							} else {
+								wrt.write(",");
+							}
+
+							wrt.write("{");
+							wrt.write("\"vertexId\": \"" + attemptId.toString() + "\"," );
+							wrt.write("\"tasks\": [");
+
+							boolean secondFirst = true;
+							ConcurrentHashMap<InstanceID, byte[]> tasks = graph.getMetrics().get(attemptId);
+							for (InstanceID instanceId: tasks.keySet()) {
+								if (secondFirst) {
+									secondFirst = false;
+								} else {
+									wrt.write(",");
+								}
+								wrt.write("{");
+								byte[] metric = tasks.get(instanceId);
+								wrt.write("\"" + instanceId.toString() + "\": " + new String(metric));
+
+								wrt.write("}");
+							}
+							wrt.write("]");
+							wrt.write("}");
+						}
+
+						wrt.write("]");
 						wrt.write("}");
 					} else {
 						wrt.write("\"vertexevents\": [],");

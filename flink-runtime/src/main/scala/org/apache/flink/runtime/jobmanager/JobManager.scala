@@ -20,7 +20,7 @@ package org.apache.flink.runtime.jobmanager
 
 import java.io.{IOException, File}
 import java.net.InetSocketAddress
-import java.util
+import java.{lang, util}
 import java.util.Collections
 
 import akka.actor.Status.{Success, Failure}
@@ -47,7 +47,7 @@ import org.apache.flink.runtime.util.{SerializedValue, EnvironmentInformation}
 import org.apache.flink.runtime.ActorLogMessages
 import org.apache.flink.runtime.akka.AkkaUtils
 import org.apache.flink.runtime.execution.librarycache.BlobLibraryCacheManager
-import org.apache.flink.runtime.instance.InstanceManager
+import org.apache.flink.runtime.instance.{InstanceID, InstanceManager}
 import org.apache.flink.runtime.jobgraph.{JobGraph, JobStatus}
 import org.apache.flink.runtime.jobmanager.accumulators.AccumulatorManager
 import org.apache.flink.runtime.jobmanager.scheduler.{Scheduler => FlinkScheduler}
@@ -147,13 +147,15 @@ class JobManager(val flinkConfiguration: Configuration,
     }
   }
 
-  def updateExecutionGraphWithTaskMetrics(taskMetrics: Set[TaskMetricsReport]): Unit = {
+  def updateExecutionGraphWithTaskMetrics(instanceId: InstanceID,
+                                          taskMetrics: Set[TaskMetricsReport]): Unit = {
     taskMetrics.foreach (taskMetric => {
       currentJobs.get(taskMetric.jobId) match {
         case Some((executionGraph, _)) => {
-          executionGraph
+          executionGraph.updateMetrics(taskMetric.executionAttemptId,
+                                       instanceId, taskMetric.serializedReport)
         }
-        case None => log.warn(s"Unable to find job ${taskMetric.jobId} for updating the task " +
+        case None => LOG.warn(s"Unable to find job ${taskMetric.jobId} for updating the task " +
           "metrics");
       }
     })
@@ -420,7 +422,7 @@ class JobManager(val flinkConfiguration: Configuration,
       try {
         log.debug("Received hearbeat message from {}", instanceID)
         instanceManager.reportHeartBeat(instanceID, metricsReport)
-        updateExecutionGraphWithTaskMetrics(taskMetrics);
+        updateExecutionGraphWithTaskMetrics(instanceID, taskMetrics);
       } catch {
         case t: Throwable => log.error(t, "Could not report heart beat from {}.", sender().path)
       }

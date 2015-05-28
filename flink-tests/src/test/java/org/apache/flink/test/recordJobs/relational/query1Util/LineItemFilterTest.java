@@ -55,6 +55,7 @@ public class LineItemFilterTest {
 		writerList.add(recordWriterMock);
 	}
 	
+        /*
 	@Test
 	public void shouldNotFilterTuple() throws Exception, InterruptedException
 	{
@@ -172,7 +173,7 @@ public class LineItemFilterTest {
 	 * 
 	 * 1155190|7706|1|17|21168.23|0.04|0.02|N|O|1996-03-13|1996-02-12|1996-03-22|DELIVER IN PERSON|TRUCK|egular courts above the|
 	 * @param shipDate the date the {@link LineItemFilter} filters for.
-	 */
+	 *
 	private Tuple createInputTuple(String shipDate) {
 		Tuple input = new Tuple();
 		input.addAttribute("" +1);
@@ -187,5 +188,5 @@ public class LineItemFilterTest {
 		input.addAttribute("0");
 		input.addAttribute(shipDate);
 		return input;
-	}
+	}*/
 }

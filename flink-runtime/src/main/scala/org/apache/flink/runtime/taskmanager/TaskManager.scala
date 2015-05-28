@@ -33,7 +33,6 @@ import com.codahale.metrics.json.MetricsModule
 import com.codahale.metrics.jvm.{MemoryUsageGaugeSet, GarbageCollectorMetricSet}
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import grizzled.slf4j.Logger
 import org.apache.flink.api.common.JobID
 
 import org.apache.flink.api.common.cache.DistributedCache
@@ -53,7 +52,7 @@ import org.apache.flink.runtime.io.disk.iomanager.IOManager.IOMode
 import org.apache.flink.runtime.io.disk.iomanager.{IOManager, IOManagerAsync}
 import org.apache.flink.runtime.io.network.NetworkEnvironment
 import org.apache.flink.runtime.io.network.netty.NettyConfig
-import org.apache.flink.runtime.jobgraph.IntermediateDataSetID
+import org.apache.flink.runtime.jobgraph.{JobVertexID, IntermediateDataSetID}
 import org.apache.flink.runtime.jobgraph.tasks.{OperatorStateCarrier,BarrierTransceiver}
 import org.apache.flink.runtime.jobmanager.JobManager
 import org.apache.flink.runtime.memorymanager.{MemoryManager, DefaultMemoryManager}
@@ -1088,10 +1087,11 @@ extends Actor with ActorLogMessages with ActorLogging {
       }
 
       val taskManagerReport: Array[Byte] = metricRegistryMapper.writeValueAsBytes(metricRegistry)
-      val serializedTaskMetrics = taskMetrics.toSet.map(taskMetric =>
-        TaskMetricsReport(taskMetric._1,
-          taskMetric._2,
-          metricRegistryMapper.writeValueAsBytes(taskMetric._3)))
+      val serializedTaskMetrics = taskMetrics.toSet.map(
+        (taskMetric: (JobID, ExecutionAttemptID, MetricRegistry)) =>
+          TaskMetricsReport(taskMetric._1,
+            taskMetric._2,
+            metricRegistryMapper.writeValueAsBytes(taskMetric._3)))
 
       currentJobManager foreach {
         jm => jm ! Heartbeat(instanceID, taskManagerReport, serializedTaskMetrics)

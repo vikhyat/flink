@@ -1332,7 +1332,7 @@ public class RegularPactTask<S extends Function, OT> extends AbstractInvokable i
 	@SuppressWarnings("unchecked")
 	public static <T> Collector<T> initOutputs(AbstractInvokable nepheleTask, ClassLoader cl, TaskConfig config,
 					List<ChainedDriver<?, ?>> chainedTasksTarget, List<RecordWriter<?>> eventualOutputs,
-											   ExecutionConfig executionConfig, TaskMetrics metrics)
+					ExecutionConfig executionConfig, TaskMetrics metrics)
 	throws Exception
 	{
 		final int numOutputs = config.getNumOutputs();
